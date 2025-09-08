@@ -791,8 +791,7 @@ end
 
 -- Enhanced item spawning system with logs support
 local function spawnSelectedItem(itemName)
-    if not player.Character or not player.Character:FindFirst
-Child("HumanoidRootPart") then
+    if not player.Character or not player.Character:FindFirst Child("HumanoidRootPart") then
         print("Character not found!")
         return
     end
@@ -1784,3 +1783,4 @@ elseif currentGame == "99NIGHTS" then
     print("99 Nights features available: Invisible Hitbox System (1-10000 range), Real-time Item Spawning, Auto Tree Cutting, Enhanced logs Support")
 end
 print("Lost Hub Complete Edition - Enhanced with intro screen, invisible hitboxes, auto tree cutting, and improved logs support!")
+
