@@ -1,4 +1,3 @@
--- Lost Hub - MM2 + 99 Nights Support with Enhanced Features (FINAL FIXED VERSION)
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -8,13 +7,11 @@ local Lighting = game:GetService("Lighting")
 
 local player = Players.LocalPlayer
 
--- Game Detection
 local MM2_GAME_IDS = {142823291, 335132309}
 local NIGHTS_99_GAME_ID = 126509999114328
 local NIGHTS_99_LOBBY_ID = 79546208627805
 local currentGame = nil
 
--- Determine which game we're in
 local function detectGame()
     for _, gameId in pairs(MM2_GAME_IDS) do
         if game.PlaceId == gameId then
@@ -35,10 +32,8 @@ end
 
 currentGame = detectGame()
 
--- Device Detection
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
--- Key System Configuration
 local function getKeyForGame(gameType)
     local keys = {
         MM2 = "murder",
@@ -49,29 +44,61 @@ local function getKeyForGame(gameType)
 end
 
 local SAVE_KEY = "LostHub_SavedKey_" .. currentGame .. "_" .. player.UserId
+local SAVE_TIMER_KEY = "LostHub_KeyTimer_" .. currentGame .. "_" .. player.UserId
 local REQUIRED_KEY = getKeyForGame(currentGame)
 
 local function isKeySaved()
-    if isfile and readfile and isfile(SAVE_KEY .. ".txt") then
-        return readfile(SAVE_KEY .. ".txt") == REQUIRED_KEY
+    if not (isfile and readfile and writefile) then return false end
+    
+    local keyFile = SAVE_KEY .. ".txt"
+    local timerFile = SAVE_TIMER_KEY .. ".txt"
+    
+    if isfile(keyFile) and isfile(timerFile) then
+        local savedKey = readfile(keyFile)
+        local savedTimer = tonumber(readfile(timerFile)) or 0
+        
+        if savedKey == REQUIRED_KEY and tick() < savedTimer then
+            return true
+        else
+            if isfile(keyFile) then
+                delfile(keyFile)
+            end
+            if isfile(timerFile) then
+                delfile(timerFile)
+            end
+        end
     end
+    
     return false
 end
 
 local function saveKey()
-    if writefile then
-        writefile(SAVE_KEY .. ".txt", REQUIRED_KEY)
-    end
+    if not writefile then return end
+    
+    local randomTime = math.random(45 * 60, 60 * 60)
+    local expireTime = tick() + randomTime
+    
+    writefile(SAVE_KEY .. ".txt", REQUIRED_KEY)
+    writefile(SAVE_TIMER_KEY .. ".txt", tostring(expireTime))
 end
 
--- Create Enhanced 99 Nights Lobby Screen with OK Button
+local function getTimeRemaining()
+    if not (isfile and readfile) then return 0 end
+    
+    local timerFile = SAVE_TIMER_KEY .. ".txt"
+    if isfile(timerFile) then
+        local savedTimer = tonumber(readfile(timerFile)) or 0
+        return math.max(0, savedTimer - tick())
+    end
+    return 0
+end
+
 local function create99NightsLobbyScreen()
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "NightsLobbyScreen"
     screenGui.ResetOnSpawn = false
     screenGui.Parent = player:WaitForChild("PlayerGui")
     
-    -- Blur effect
     local blurEffect = Instance.new("BlurEffect")
     blurEffect.Size = 24
     blurEffect.Parent = Lighting
@@ -120,7 +147,6 @@ local function create99NightsLobbyScreen()
     message.TextWrapped = true
     message.Parent = mainFrame
     
-    -- OK Button
     local okButton = Instance.new("TextButton")
     okButton.Size = UDim2.new(0, 120, 0, 40)
     okButton.Position = UDim2.new(0.5, -60, 1, -70)
@@ -145,14 +171,12 @@ local function create99NightsLobbyScreen()
     return screenGui, blurEffect
 end
 
--- Create unsupported game screen
 local function createUnsupportedGameScreen()
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "UnsupportedGameScreen"
     screenGui.ResetOnSpawn = false
     screenGui.Parent = player:WaitForChild("PlayerGui")
     
-    -- Blur effect
     local blurEffect = Instance.new("BlurEffect")
     blurEffect.Size = 24
     blurEffect.Parent = Lighting
@@ -260,14 +284,12 @@ local function createUnsupportedGameScreen()
     return screenGui, blurEffect
 end
 
--- Enhanced Intro Screen
 local function createIntroScreen()
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "LostHubIntro"
     screenGui.ResetOnSpawn = false
     screenGui.Parent = player:WaitForChild("PlayerGui")
     
-    -- Blur effect
     local blurEffect = Instance.new("BlurEffect")
     blurEffect.Size = 24
     blurEffect.Parent = Lighting
@@ -307,16 +329,13 @@ local function createIntroScreen()
     subtitle.TextTransparency = 1
     subtitle.Parent = mainFrame
     
-    -- Animate title
     local titleTween = TweenService:Create(title, TweenInfo.new(1, Enum.EasingStyle.Quad), {TextTransparency = 0})
     titleTween:Play()
     
-    -- Animate subtitle with delay
     task.wait(0.5)
     local subtitleTween = TweenService:Create(subtitle, TweenInfo.new(1, Enum.EasingStyle.Quad), {TextTransparency = 0})
     subtitleTween:Play()
     
-    -- Wait and fade out
     task.wait(2.5)
     local fadeOutTitle = TweenService:Create(title, TweenInfo.new(0.5, Enum.EasingStyle.Quad), {TextTransparency = 1})
     local fadeOutSubtitle = TweenService:Create(subtitle, TweenInfo.new(0.5, Enum.EasingStyle.Quad), {TextTransparency = 1})
@@ -332,23 +351,19 @@ local function createIntroScreen()
     return true
 end
 
--- If 99 Nights lobby, show lobby screen and exit
 if currentGame == "99NIGHTS_LOBBY" then
     create99NightsLobbyScreen()
     return
 end
 
--- If unsupported game, show screen and exit
 if currentGame == "UNSUPPORTED" then
     createUnsupportedGameScreen()
     return
 end
 
--- Global Variables
 local Window = nil
 local hubLoaded = false
 
--- MM2 Specific Functions (UNCHANGED - DO NOT MODIFY)
 local function getPlayerRole(plr)
     if not plr or not plr.Character then return "Dead" end
     
@@ -372,7 +387,6 @@ local function getPlayerRole(plr)
     end
 end
 
--- MM2 Configuration (UNCHANGED - DO NOT MODIFY)
 local MM2_CONFIG = {
     TWEEN_SPEED = 1,
     DELAY = 0.05,
@@ -380,7 +394,6 @@ local MM2_CONFIG = {
     PRIORITY_COINS = true,
 }
 
--- MM2 Variables (UNCHANGED - DO NOT MODIFY)
 local isCollecting = false
 local noclipConnection = nil
 local currentTween = nil
@@ -388,7 +401,6 @@ local collectLoop = nil
 local isAutoShooting = false
 local shootConnection = nil
 
--- MM2 Functions (UNCHANGED - DO NOT MODIFY)
 local function enableNoclip()
     if noclipConnection then return end
     
@@ -617,7 +629,6 @@ local function stopAimbot()
     end
 end
 
--- 99 Nights Enhanced Functions (COMPLETE REWRITE)
 local selectedCreature = "Bear"
 local selectedItem = ""
 local selectedESPCreature = ""
@@ -629,16 +640,15 @@ local modifiedCreatures = {}
 local espEnabled = false
 local allESPEnabled = false
 local playerESPEnabled = false
-local isFlying = false
-local flySpeed = 50
-local flyConnection = nil
-local flyBodyVelocity = nil
-local flyBodyPosition = nil
+local infiniteJumpEnabled = false
+local infiniteJumpConnection = nil
+local killAuraEnabled = false
+local killAuraConnection = nil
+local killAuraRange = 50
 local playerSpeed = 16
 local playerJumpPower = 50
 local noclipEnabled = false
 local noclipConnection99 = nil
-local isAutoPlaying = false
 local autoCuttingTrees = false
 local mapHighlightEnabled = false
 local mapHighlight = nil
@@ -646,19 +656,16 @@ local currentTweenToTree = nil
 local isAutoGrindingGems = false
 local autoGemConnection = nil
 
--- Enhanced ESP system with auto-refresh
 local espData = {}
 local playerESPData = {}
 local espRefreshConnection = nil
 
--- All creatures from the wiki
 local creatureNames = {
     "Arctic Fox", "Mammoth", "The Owl", "Polar Bear", "The Deer",
     "Alien", "Alien Elite", "Cultist", "Crossbow Cultist", 
     "Juggernaut Cultist", "Wolf", "Alpha Wolf", "Bear", "Bunny"
 }
 
--- Dynamic creature scanning
 local function scanWorkspaceForCreatures()
     local foundCreatures = {}
     
@@ -691,7 +698,6 @@ local function scanWorkspaceForCreatures()
     return result
 end
 
--- Dynamic player scanning
 local function scanWorkspaceForPlayers()
     local foundPlayers = {}
     
@@ -704,7 +710,6 @@ local function scanWorkspaceForPlayers()
     return foundPlayers
 end
 
--- Enhanced item scanning
 local function scanWorkspaceForItems()
     local foundItems = {}
     local itemTypes = {
@@ -739,7 +744,6 @@ local function scanWorkspaceForItems()
     return foundItems
 end
 
--- FIXED Enhanced tree scanning 
 local function scanWorkspaceForSmallTrees()
     local foundTrees = {}
     
@@ -765,7 +769,6 @@ local function scanWorkspaceForSmallTrees()
     return foundTrees
 end
 
--- Gem scanning function
 local function scanWorkspaceForGems()
     local foundGems = {}
     
@@ -782,7 +785,6 @@ local function scanWorkspaceForGems()
     return foundGems
 end
 
--- Advanced creature finding
 local function findCreaturesInWorkspace(creatureName)
     local foundCreatures = {}
     local searchPatterns = {
@@ -807,23 +809,14 @@ local function findCreaturesInWorkspace(creatureName)
     return foundCreatures
 end
 
--- FIXED Enhanced invisible hitbox modification system
 local function modifyCreatureHitbox(creatureName, newSize)
     local creatures = findCreaturesInWorkspace(creatureName)
     local modifiedCount = 0
     
-    if #creatures > 0 then
-        local creature = creatures[1]
-        
+    for _, creature in pairs(creatures) do
         if creature and creature.Parent then
             if not originalHitboxSizes[creature] then
                 originalHitboxSizes[creature] = {}
-            end
-            
-            for _, part in pairs(creature:GetDescendants()) do
-                if part:IsA("Part") and part.Name == "InvisibleHitbox" then
-                    part:Destroy()
-                end
             end
             
             local mainPart = creature:FindFirstChild("HumanoidRootPart") or 
@@ -831,19 +824,20 @@ local function modifyCreatureHitbox(creatureName, newSize)
                             creature:FindFirstChildOfClass("BasePart")
             
             if mainPart then
-                if not originalHitboxSizes[creature][mainPart] then
-                    originalHitboxSizes[creature][mainPart] = mainPart.Size
+                for _, existingHitbox in pairs(creature:GetChildren()) do
+                    if existingHitbox.Name == "CustomHitbox" then
+                        existingHitbox:Destroy()
+                    end
                 end
                 
                 local hitboxPart = Instance.new("Part")
-                hitboxPart.Name = "InvisibleHitbox"
+                hitboxPart.Name = "CustomHitbox"
                 hitboxPart.Size = Vector3.new(newSize, newSize, newSize)
                 hitboxPart.CFrame = mainPart.CFrame
                 hitboxPart.Anchored = false
                 hitboxPart.CanCollide = true
                 hitboxPart.Transparency = 1
                 hitboxPart.Material = Enum.Material.ForceField
-                hitboxPart.BrickColor = BrickColor.new("Bright red")
                 hitboxPart.Parent = creature
                 
                 local weld = Instance.new("WeldConstraint")
@@ -851,8 +845,9 @@ local function modifyCreatureHitbox(creatureName, newSize)
                 weld.Part1 = hitboxPart
                 weld.Parent = hitboxPart
                 
+                originalHitboxSizes[creature][mainPart] = mainPart.Size
                 modifiedCreatures[creature] = true
-                modifiedCount = 1
+                modifiedCount = modifiedCount + 1
             end
         end
     end
@@ -860,12 +855,11 @@ local function modifyCreatureHitbox(creatureName, newSize)
     return modifiedCount > 0
 end
 
--- Reset all creature hitboxes
 local function resetAllHitboxes()
     for creature, parts in pairs(originalHitboxSizes) do
         if creature and creature.Parent then
-            for _, part in pairs(creature:GetDescendants()) do
-                if part:IsA("Part") and part.Name == "InvisibleHitbox" then
+            for _, part in pairs(creature:GetChildren()) do
+                if part.Name == "CustomHitbox" then
                     part:Destroy()
                 end
             end
@@ -876,7 +870,6 @@ local function resetAllHitboxes()
     modifiedCreatures = {}
 end
 
--- Enhanced hitbox visualization
 local function createHitboxVisualization(creatureName, size)
     for _, visual in pairs(hitboxVisualization) do
         if visual and visual.Parent then
@@ -936,7 +929,51 @@ local function createHitboxVisualization(creatureName, size)
     end
 end
 
--- ENHANCED ESP System for Creatures
+local function startKillAura()
+    if killAuraConnection then return end
+    
+    killAuraConnection = RunService.Heartbeat:Connect(function()
+        if not killAuraEnabled or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+            return
+        end
+        
+        local playerPos = player.Character.HumanoidRootPart.Position
+        local tool = player.Character:FindFirstChildOfClass("Tool")
+        
+        if not tool then
+            for _, t in pairs(player.Backpack:GetChildren()) do
+                if t:IsA("Tool") then
+                    player.Character.Humanoid:EquipTool(t)
+                    tool = t
+                    break
+                end
+            end
+        end
+        
+        if tool and tool:FindFirstChild("Handle") then
+            for _, creature in pairs(workspace:GetDescendants()) do
+                if creature:IsA("Model") and creature:FindFirstChildOfClass("Humanoid") and creature ~= player.Character then
+                    local creatureRoot = creature:FindFirstChild("HumanoidRootPart") or creature:FindFirstChildOfClass("BasePart")
+                    if creatureRoot then
+                        local distance = (playerPos - creatureRoot.Position).Magnitude
+                        if distance <= killAuraRange then
+                            tool:Activate()
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function stopKillAura()
+    if killAuraConnection then
+        killAuraConnection:Disconnect()
+        killAuraConnection = nil
+    end
+end
+
 local function createESPForCreature(creature)
     if not creature or not creature.Parent then return end
     
@@ -1023,7 +1060,6 @@ local function createESPForCreature(creature)
     espData[creature] = {box = espBox, billboard = billboard, connection = connection}
 end
 
--- ENHANCED ESP System for Players
 local function createESPForPlayer(targetPlayer)
     if not targetPlayer or targetPlayer == player or not targetPlayer.Character then return end
     
@@ -1107,7 +1143,6 @@ local function createESPForPlayer(targetPlayer)
     playerESPData[targetPlayer] = {box = espBox, billboard = billboard, connection = connection}
 end
 
--- ESP Auto-refresh system
 local function startESPAutoRefresh()
     if espRefreshConnection then return end
     
@@ -1150,7 +1185,6 @@ local function stopESPAutoRefresh()
     end
 end
 
--- Remove ESP functions
 local function removeESPFromCreature(creature)
     if espData[creature] then
         if espData[creature].connection then
@@ -1199,7 +1233,6 @@ local function removeESPFromPlayer(targetPlayer)
     end
 end
 
--- Enable ESP functions
 local function enableCreatureESP(creatureName)
     local creatures = findCreaturesInWorkspace(creatureName)
     for _, creature in pairs(creatures) do
@@ -1254,7 +1287,6 @@ local function disableAllESP()
     end
 end
 
--- Map Highlight Toggle
 local function toggleMapHighlight()
     if mapHighlightEnabled then
         if mapHighlight then
@@ -1273,7 +1305,6 @@ local function toggleMapHighlight()
     end
 end
 
--- FIXED Enhanced item spawning - logs teleport to player properly
 local function spawnSelectedItem(itemName)
     if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
         return
@@ -1282,7 +1313,7 @@ local function spawnSelectedItem(itemName)
     local referenceItem = nil
     
     if itemName:lower():find("log") then
-        local searchNames = {"Log", "Logs", "log", "logs"}
+        local searchNames = {"Log", "Logs", "log", "logs", "Wood"}
         
         for _, searchName in pairs(searchNames) do
             for _, obj in pairs(workspace:GetDescendants()) do
@@ -1343,9 +1374,8 @@ local function spawnSelectedItem(itemName)
     
     task.wait(2)
     
-    -- FIXED: Collect all spawned items by teleporting them to player
     for _, obj in pairs(workspace:GetChildren()) do
-        if obj.Name == itemName or obj.Name == "Log" or obj.Name == "Logs" then
+        if obj.Name == itemName or obj.Name == "Log" or obj.Name == "Logs" or obj.Name == "Wood" then
             if obj:IsA("Part") then
                 local collectTween = TweenService:Create(
                     obj,
@@ -1373,7 +1403,6 @@ local function spawnSelectedItem(itemName)
     end
 end
 
--- COMPLETELY REWRITTEN tree cutting with perfect positioning
 local function startAutoCutTrees()
     if autoCuttingTrees then return end
     
@@ -1410,8 +1439,7 @@ local function startAutoCutTrees()
                     end
                     
                     if treePos and treePart then
-                        -- FIXED: Position player DIRECTLY in front of the tree and floating
-                        local frontPos = treePos + Vector3.new(0, 5, 8) -- In front and floating
+                        local frontPos = treePos + Vector3.new(0, 5, 8)
                         local lookDirection = (treePos - frontPos).Unit
                         local targetCFrame = CFrame.lookAt(frontPos, treePos)
                         
@@ -1440,15 +1468,13 @@ local function startAutoCutTrees()
                                 fireclickdetector(tree:FindFirstChildOfClass("ClickDetector"))
                             end
                             
-                            -- FIXED: Wait until tree is completely gone
                             local startTime = tick()
                             while tree and tree.Parent and (tick() - startTime) < 10 and autoCuttingTrees do
                                 task.wait(0.3)
                             end
                             
-                            -- Move instantly to next tree once this one is gone
                             if not tree or not tree.Parent then
-                                task.wait(0.2) -- Brief pause before next tree
+                                task.wait(0.2)
                             end
                         end
                     end
@@ -1480,97 +1506,6 @@ local function stopAutoCutTrees()
     end
 end
 
--- FIXED Enhanced fly system
-local function startFly()
-    if isFlying then return end
-    
-    isFlying = true
-    
-    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
-        return
-    end
-    
-    local hrp = player.Character.HumanoidRootPart
-    local humanoid = player.Character:FindFirstChild("Humanoid")
-    
-    flyBodyVelocity = Instance.new("BodyVelocity")
-    flyBodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
-    flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
-    flyBodyVelocity.Parent = hrp
-    
-    flyBodyPosition = Instance.new("BodyPosition")
-    flyBodyPosition.MaxForce = Vector3.new(4000, 4000, 4000)
-    flyBodyPosition.Position = hrp.Position
-    flyBodyPosition.Parent = hrp
-    
-    flyConnection = RunService.Heartbeat:Connect(function()
-        if not isFlying or not player.Character or not hrp or not hrp.Parent then
-            if flyBodyVelocity then flyBodyVelocity:Destroy() end
-            if flyBodyPosition then flyBodyPosition:Destroy() end
-            return
-        end
-        
-        local camera = workspace.CurrentCamera
-        local moveVector = Vector3.new(0, 0, 0)
-        
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
-            moveVector = moveVector + camera.CFrame.LookVector
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
-            moveVector = moveVector - camera.CFrame.LookVector
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
-            moveVector = moveVector - camera.CFrame.RightVector
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
-            moveVector = moveVector + camera.CFrame.RightVector
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-            moveVector = moveVector + Vector3.new(0, 1, 0)
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
-            moveVector = moveVector - Vector3.new(0, 1, 0)
-        end
-        
-        if moveVector.Magnitude > 0 then
-            local newPos = hrp.Position + (moveVector.Unit * flySpeed * 0.1)
-            flyBodyPosition.Position = newPos
-        else
-            flyBodyPosition.Position = hrp.Position
-        end
-        
-        flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
-        
-        if humanoid then
-            humanoid.PlatformStand = true
-        end
-    end)
-end
-
-local function stopFly()
-    isFlying = false
-    
-    if flyConnection then
-        flyConnection:Disconnect()
-        flyConnection = nil
-    end
-    
-    if flyBodyVelocity then
-        flyBodyVelocity:Destroy()
-        flyBodyVelocity = nil
-    end
-    
-    if flyBodyPosition then
-        flyBodyPosition:Destroy()
-        flyBodyPosition = nil
-    end
-    
-    if player.Character and player.Character:FindFirstChild("Humanoid") then
-        player.Character.Humanoid.PlatformStand = false
-    end
-end
-
--- Enhanced noclip
 local function enableNoclip99()
     if noclipEnabled then return end
     
@@ -1612,7 +1547,6 @@ local function disableNoclip99()
     end
 end
 
--- FIXED Update player speed and jump power
 local function updatePlayerSpeed(speed)
     playerSpeed = speed
     if player.Character and player.Character:FindFirstChild("Humanoid") then
@@ -1628,7 +1562,27 @@ local function updatePlayerJumpPower(power)
     end
 end
 
--- Player teleportation function
+local function enableInfiniteJump()
+    if infiniteJumpEnabled then return end
+    
+    infiniteJumpEnabled = true
+    
+    infiniteJumpConnection = UserInputService.JumpRequest:Connect(function()
+        if player.Character and player.Character:FindFirstChild("Humanoid") then
+            player.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end)
+end
+
+local function disableInfiniteJump()
+    infiniteJumpEnabled = false
+    
+    if infiniteJumpConnection then
+        infiniteJumpConnection:Disconnect()
+        infiniteJumpConnection = nil
+    end
+end
+
 local function teleportToPlayer(targetPlayerName)
     local targetPlayer = Players:FindFirstChild(targetPlayerName)
     if not targetPlayer then
@@ -1646,7 +1600,6 @@ local function teleportToPlayer(targetPlayerName)
     player.Character.HumanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, -5)
 end
 
--- Tween to player function
 local function tweenToPlayer(targetPlayerName)
     local targetPlayer = Players:FindFirstChild(targetPlayerName)
     if not targetPlayer then
@@ -1672,7 +1625,6 @@ local function tweenToPlayer(targetPlayerName)
     tween:Play()
 end
 
--- NEW Auto Gem Grinder with server hopping
 local function startAutoGemGrinder()
     if isAutoGrindingGems then return end
     
@@ -1683,12 +1635,10 @@ local function startAutoGemGrinder()
             local gems = scanWorkspaceForGems()
             
             if #gems == 0 then
-                -- No gems found, hop servers
                 TeleportService:Teleport(NIGHTS_99_GAME_ID, player)
                 break
             end
             
-            -- Collect all gems
             if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                 local playerPos = player.Character.HumanoidRootPart.Position
                 
@@ -1704,7 +1654,6 @@ local function startAutoGemGrinder()
                     end
                     
                     if gemPos then
-                        -- Tween to gem
                         local tween = TweenService:Create(
                             player.Character.HumanoidRootPart,
                             TweenInfo.new(1.5, Enum.EasingStyle.Quad),
@@ -1713,7 +1662,6 @@ local function startAutoGemGrinder()
                         tween:Play()
                         tween.Completed:Wait()
                         
-                        -- Auto-click gem
                         if gem and gem.Parent then
                             if gem:IsA("Part") and gem:FindFirstChildOfClass("ClickDetector") then
                                 fireclickdetector(gem:FindFirstChildOfClass("ClickDetector"))
@@ -1732,7 +1680,7 @@ local function startAutoGemGrinder()
                 end
             end
             
-            task.wait(10) -- Wait before scanning again
+            task.wait(10)
         end
     end)
 end
@@ -1745,7 +1693,6 @@ local function stopAutoGemGrinder()
     end
 end
 
--- Hub Creation Function
 local function createHub()
     if hubLoaded then return end
     hubLoaded = true
@@ -1776,7 +1723,6 @@ local function createHub()
     local tabs = {}
     
     if currentGame == "MM2" then
-        -- ALL MM2 TABS PRESERVED (UNCHANGED - DO NOT MODIFY)
         tabs.CreditsTab = Window:Tab({Title = "Credits", Icon = "info"})
         tabs.EspTab = Window:Tab({Title = "ESP", Icon = "eye"})
         tabs.MurderTab = Window:Tab({Title = "Murder", Icon = "zap"})
@@ -1785,7 +1731,6 @@ local function createHub()
         tabs.RandomTab = Window:Tab({Title = "Random", Icon = "settings"})
         tabs.AutoGrindTab = Window:Tab({Title = "Auto Grind", Icon = "circle-play"})
         
-        -- Credits Tab - Enhanced with detailed descriptions
         tabs.CreditsTab:Section({Title = "Team Credits"})
         tabs.CreditsTab:Paragraph({
             Title = "Script Developers",
@@ -1814,7 +1759,6 @@ local function createHub()
             Desc = "Dedicated individuals who test new features, report bugs, and provide feedback to ensure the script works reliably across different scenarios."
         })
 
-        -- ESP Tab (UNCHANGED - DO NOT MODIFY)
         tabs.EspTab:Section({Title = "Enhanced ESP System"})
         
         tabs.EspTab:Button({
@@ -1953,7 +1897,6 @@ local function createHub()
             end
         })
         
-        -- Murder Tab (UNCHANGED - DO NOT MODIFY)
         tabs.MurderTab:Section({Title = "Murderer Features"})
         
         tabs.MurderTab:Toggle({
@@ -1997,8 +1940,6 @@ local function createHub()
                             task.wait(0.3)
                         end
                     end)
-                else
-                    -- Stop auto kill
                 end
             end
         })
@@ -2028,13 +1969,10 @@ local function createHub()
                             task.wait(0.1)
                         end
                     end
-                else
-                    -- Not murderer message
                 end
             end
         })
 
-        -- Sheriff Tab (UNCHANGED - DO NOT MODIFY)
         tabs.SheriffTab:Section({Title = "Sheriff Features"})
         
         tabs.SheriffTab:Toggle({
@@ -2074,7 +2012,6 @@ local function createHub()
             end
         })
 
-        -- Innocent Tab (UNCHANGED - DO NOT MODIFY)
         tabs.InnocentTab:Section({Title = "Innocent Features"})
         
         tabs.InnocentTab:Button({
@@ -2167,7 +2104,6 @@ local function createHub()
             end
         end)
 
-        -- Random Tab (UNCHANGED - DO NOT MODIFY)
         tabs.RandomTab:Section({Title = "Movement Features"})
         
         tabs.RandomTab:Toggle({
@@ -2252,7 +2188,6 @@ local function createHub()
             end
         })
 
-        -- Auto Grind Tab (UNCHANGED - DO NOT MODIFY)
         tabs.AutoGrindTab:Section({Title = "Collection System"})
         
         tabs.AutoGrindTab:Toggle({
@@ -2282,7 +2217,6 @@ local function createHub()
         })
         
     elseif currentGame == "99NIGHTS" then
-        -- 99 Nights Tabs with all fixes applied
         tabs.CreditsTab = Window:Tab({Title = "Credits", Icon = "info"})
         tabs.EspTab = Window:Tab({Title = "ESP", Icon = "eye"})
         tabs.PlayerTab = Window:Tab({Title = "Player", Icon = "user"})
@@ -2290,7 +2224,6 @@ local function createHub()
         tabs.WorldTab = Window:Tab({Title = "World Features", Icon = "globe"})
         tabs.AutoGrindTab = Window:Tab({Title = "Auto Grind", Icon = "circle-play"})
         
-        -- Credits Tab
         tabs.CreditsTab:Section({Title = "Team Credits"})
         tabs.CreditsTab:Paragraph({
             Title = "Script Developers",
@@ -2319,7 +2252,6 @@ local function createHub()
             Desc = "Dedicated individuals who test new features, report bugs, and provide feedback to ensure the script works reliably across different scenarios."
         })
         
-        -- ESP Tab
         tabs.EspTab:Section({Title = "Creature ESP System"})
         
         local creatureESPDropdown = tabs.EspTab:Dropdown({
@@ -2393,7 +2325,6 @@ local function createHub()
             end
         })
         
-        -- FIXED Player Tab 
         tabs.PlayerTab:Section({Title = "Movement System"})
         
         tabs.PlayerTab:Slider({
@@ -2423,27 +2354,15 @@ local function createHub()
         })
         
         tabs.PlayerTab:Toggle({
-            Title = "Float",
-            Desc = "Uses CFrame + BodyVelocity for smooth floating",
+            Title = "Infinite Jump",
+            Desc = "Jump infinitely without touching the ground",
             Default = false,
             Callback = function(state)
-                if state then startFly()
+                if state then
+                    enableInfiniteJump()
                 else
-                    stopFly()
+                    disableInfiniteJump()
                 end
-            end
-        })
-        
-        tabs.PlayerTab:Slider({
-            Title = "Float Speed",
-            Step = 1,
-            Value = {
-                Min = 1,
-                Max = 200,
-                Default = 50,
-            },
-            Callback = function(value)
-                flySpeed = value
             end
         })
         
@@ -2524,7 +2443,6 @@ local function createHub()
             end
         })
         
-        -- FIXED Creatures Tab with working hitbox
         tabs.CreaturesTab:Section({Title = "Dynamic Creature System"})
         
         local creatureDropdown = tabs.CreaturesTab:Dropdown({
@@ -2569,7 +2487,7 @@ local function createHub()
         
         tabs.CreaturesTab:Button({
             Title = "Modify Creature Hitbox",
-            Desc = "Create invisible hitbox (hits only 1 animal at a time)",
+            Desc = "Create invisible hitbox for selected creature",
             Callback = function()
                 modifyCreatureHitbox(selectedCreature, hitboxSize)
             end
@@ -2612,7 +2530,35 @@ local function createHub()
             end
         })
         
-        -- World Features Tab
+        tabs.CreaturesTab:Section({Title = "Kill Aura System"})
+        
+        tabs.CreaturesTab:Slider({
+            Title = "Kill Aura Range",
+            Step = 1,
+            Value = {
+                Min = 10,
+                Max = 200,
+                Default = 50,
+            },
+            Callback = function(value)
+                killAuraRange = value
+            end
+        })
+        
+        tabs.CreaturesTab:Toggle({
+            Title = "Kill Aura",
+            Desc = "Automatically attack creatures when they get close",
+            Default = false,
+            Callback = function(state)
+                killAuraEnabled = state
+                if state then
+                    startKillAura()
+                else
+                    stopKillAura()
+                end
+            end
+        })
+        
         tabs.WorldTab:Section({Title = "Map Features"})
         
         tabs.WorldTab:Toggle({
@@ -2649,7 +2595,7 @@ local function createHub()
         
         tabs.WorldTab:Button({
             Title = "Spawn Selected Item",
-            Desc = "Spawns the selected item - FIXED for logs teleportation",
+            Desc = "Spawns the selected item with proper log/logs support",
             Callback = function()
                 if selectedItem ~= "" then
                     spawnSelectedItem(selectedItem)
@@ -2664,9 +2610,38 @@ local function createHub()
                 if selectedItem ~= "" then
                     local removed = 0
                     for _, obj in pairs(workspace:GetChildren()) do
-                        if obj.Name == selectedItem or obj.Name == "Log" or obj.Name == "Logs" then
+                        if obj.Name == selectedItem or obj.Name == "Log" or obj.Name == "Logs" or obj.Name == "Wood" then
                             obj:Destroy()
                             removed = removed + 1
+                        end
+                    end
+                end
+            end
+        })
+        
+        tabs.WorldTab:Section({Title = "Collection System"})
+        
+        tabs.WorldTab:Button({
+            Title = "Collect All Items",
+            Desc = "Teleport all collectible items to player",
+            Callback = function()
+                if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+                    return
+                end
+                
+                local playerPos = player.Character.HumanoidRootPart.Position
+                local collected = 0
+                
+                for _, obj in pairs(workspace:GetDescendants()) do
+                    if obj:IsA("Part") then
+                        local name = obj.Name:lower()
+                        if name:find("wood") or name:find("log") or name:find("logs") or name:find("item") or 
+                           name:find("coin") or name:find("gem") or name:find("crystal") or
+                           name:find("berry") or name:find("meat") or name:find("bone") then
+                            obj.Position = playerPos + Vector3.new(0, collected * 0.5, 0)
+                            collected = collected + 1
+                            
+                            if collected >= 50 then break end
                         end
                     end
                 end
@@ -2677,7 +2652,7 @@ local function createHub()
         
         tabs.WorldTab:Toggle({
             Title = "Auto Cut Small Trees",
-            Desc = "FIXED: Auto cut trees - player floats in front of tree and waits for completion",
+            Desc = "Auto cut trees - player floats in front of tree and waits for completion",
             Default = false,
             Callback = function(state)
                 if state then
@@ -2707,7 +2682,6 @@ local function createHub()
             end
         })
         
-        -- NEW Auto Grind Tab
         tabs.AutoGrindTab:Section({Title = "Gem Grinding System"})
         
         tabs.AutoGrindTab:Toggle({
@@ -2739,34 +2713,7 @@ local function createHub()
             end
         })
         
-        tabs.AutoGrindTab:Section({Title = "General Collection"})
-        
-        tabs.AutoGrindTab:Button({
-            Title = "Collect All Items",
-            Desc = "Teleport all collectible items to player",
-            Callback = function()
-                if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
-                    return
-                end
-                
-                local playerPos = player.Character.HumanoidRootPart.Position
-                local collected = 0
-                
-                for _, obj in pairs(workspace:GetDescendants()) do
-                    if obj:IsA("Part") then
-                        local name = obj.Name:lower()
-                        if name:find("wood") or name:find("log") or name:find("logs") or name:find("item") or 
-                           name:find("coin") or name:find("gem") or name:find("crystal") or
-                           name:find("berry") or name:find("meat") or name:find("bone") then
-                            obj.Position = playerPos + Vector3.new(0, collected * 0.5, 0)
-                            collected = collected + 1
-                            
-                            if collected >= 50 then break end
-                        end
-                    end
-                end
-            end
-        })
+        tabs.AutoGrindTab:Section({Title = "Workspace Analysis"})
         
         tabs.AutoGrindTab:Button({
             Title = "Scan Workspace",
@@ -2780,7 +2727,6 @@ local function createHub()
     end
 end
 
--- Enhanced Toggle Button
 local function createToggleButton()
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "LostToggle"
@@ -2848,7 +2794,6 @@ local function createToggleButton()
     end)
 end
 
--- Enhanced Key System with Settings
 if isKeySaved() then
     task.spawn(function()
         createIntroScreen()
@@ -2867,7 +2812,7 @@ else
         keyGui.Parent = player.PlayerGui
         keyGui.ResetOnSpawn = false
         
-        local frameSize = isMobile and UDim2.new(0, 380, 0, 420) or UDim2.new(0, 420, 0, 400)
+        local frameSize = isMobile and UDim2.new(0, 380, 0, 450) or UDim2.new(0, 420, 0, 430)
         
         local frame = Instance.new("Frame")
         frame.Size = frameSize
@@ -2937,12 +2882,23 @@ else
         inputCorner.CornerRadius = UDim.new(0, 8)
         inputCorner.Parent = keyInput
         
+        local timerLabel = Instance.new("TextLabel")
+        timerLabel.Size = UDim2.new(0, inputWidth, 0, 25)
+        timerLabel.Position = UDim2.new(0, 35, 0, 155)
+        timerLabel.BackgroundTransparency = 1
+        timerLabel.Text = "Key expires after use (45-60 min randomly)"
+        timerLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+        timerLabel.TextSize = isMobile and 12 or 14
+        timerLabel.Font = Enum.Font.Gotham
+        timerLabel.TextXAlignment = Enum.TextXAlignment.Left
+        timerLabel.Parent = frame
+        
         local buttonWidth = (inputWidth - 20) / 2
         local buttonHeight = isMobile and 40 or 35
         
         local submitBtn = Instance.new("TextButton")
         submitBtn.Size = UDim2.new(0, buttonWidth, 0, buttonHeight)
-        submitBtn.Position = UDim2.new(0, 35, 0, isMobile and 170 or 160)
+        submitBtn.Position = UDim2.new(0, 35, 0, isMobile and 190 or 185)
         submitBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         submitBtn.Text = "Submit Key"
         submitBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
@@ -2956,7 +2912,7 @@ else
         
         local getKeyBtn = Instance.new("TextButton")
         getKeyBtn.Size = UDim2.new(0, buttonWidth, 0, buttonHeight)
-        getKeyBtn.Position = UDim2.new(0, 45 + buttonWidth, 0, isMobile and 170 or 160)
+        getKeyBtn.Position = UDim2.new(0, 45 + buttonWidth, 0, isMobile and 190 or 185)
         getKeyBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         getKeyBtn.Text = "Get Key"
         getKeyBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
@@ -2968,10 +2924,9 @@ else
         getKeyCorner.CornerRadius = UDim.new(0, 8)
         getKeyCorner.Parent = getKeyBtn
         
-        -- Game teleport buttons
         local mm2TeleportBtn = Instance.new("TextButton")
         mm2TeleportBtn.Size = UDim2.new(0, buttonWidth, 0, buttonHeight)
-        mm2TeleportBtn.Position = UDim2.new(0, 35, 0, isMobile and 230 or 210)
+        mm2TeleportBtn.Position = UDim2.new(0, 35, 0, isMobile and 250 or 235)
         mm2TeleportBtn.BackgroundColor3 = Color3.fromRGB(40, 167, 69)
         mm2TeleportBtn.Text = "Join MM2"
         mm2TeleportBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -2985,7 +2940,7 @@ else
         
         local nightsTeleportBtn = Instance.new("TextButton")
         nightsTeleportBtn.Size = UDim2.new(0, buttonWidth, 0, buttonHeight)
-        nightsTeleportBtn.Position = UDim2.new(0, 45 + buttonWidth, 0, isMobile and 230 or 210)
+        nightsTeleportBtn.Position = UDim2.new(0, 45 + buttonWidth, 0, isMobile and 250 or 235)
         nightsTeleportBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
         nightsTeleportBtn.Text = "Join 99 NIGHTS"
         nightsTeleportBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -2999,7 +2954,7 @@ else
         
         local welcome = Instance.new("TextLabel")
         welcome.Size = UDim2.new(0, inputWidth, 0, 25)
-        welcome.Position = UDim2.new(0, 35, 0, isMobile and 290 or 270)
+        welcome.Position = UDim2.new(0, 35, 0, isMobile and 310 or 285)
         welcome.BackgroundTransparency = 1
         welcome.Text = "Welcome (" .. player.Name .. ")"
         welcome.TextColor3 = Color3.new(1, 1, 1)
@@ -3010,7 +2965,7 @@ else
         
         local welcomeDesc = Instance.new("TextLabel")
         welcomeDesc.Size = UDim2.new(0, inputWidth, 0, 20)
-        welcomeDesc.Position = UDim2.new(0, 35, 0, isMobile and 315 or 295)
+        welcomeDesc.Position = UDim2.new(0, 35, 0, isMobile and 335 or 310)
         welcomeDesc.BackgroundTransparency = 1
         welcomeDesc.Text = welcomeMessage
         welcomeDesc.TextColor3 = Color3.fromRGB(150, 150, 150)
@@ -3019,10 +2974,9 @@ else
         welcomeDesc.TextXAlignment = Enum.TextXAlignment.Left
         welcomeDesc.Parent = frame
         
-        -- Premium button
         local premiumBtn = Instance.new("TextButton")
         premiumBtn.Size = UDim2.new(0, inputWidth, 0, buttonHeight)
-        premiumBtn.Position = UDim2.new(0, 35, 0, isMobile and 350 or 330)
+        premiumBtn.Position = UDim2.new(0, 35, 0, isMobile and 370 or 345)
         premiumBtn.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
         premiumBtn.Text = "Buy Premium Key"
         premiumBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
@@ -3034,7 +2988,6 @@ else
         premiumCorner.CornerRadius = UDim.new(0, 8)
         premiumCorner.Parent = premiumBtn
         
-        -- Make draggable
         local dragging = false
         local dragStart = nil
         local startPos = nil
@@ -3060,7 +3013,6 @@ else
             end
         end)
         
-        -- Button functionality
         submitBtn.MouseButton1Click:Connect(function()
             if keyInput.Text == REQUIRED_KEY then
                 saveKey()
@@ -3120,7 +3072,6 @@ else
     end)
 end
 
--- Auto-cleanup on character respawn
 player.CharacterAdded:Connect(function()
     task.wait(1)
     if isCollecting then
@@ -3132,8 +3083,11 @@ player.CharacterAdded:Connect(function()
     if noclipEnabled then
         enableNoclip99()
     end
-    if isFlying then
-        startFly()
+    if infiniteJumpEnabled then
+        enableInfiniteJump()
+    end
+    if killAuraEnabled then
+        startKillAura()
     end
     
     updatePlayerSpeed(playerSpeed)
