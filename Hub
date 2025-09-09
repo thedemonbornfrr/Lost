@@ -622,6 +622,7 @@ end
 local selectedCreature = "Bear"
 local selectedItem = ""
 local selectedESPCreature = ""
+local selectedPlayerForTP = ""
 local hitboxSize = 70
 local hitboxVisualization = {}
 local originalHitboxSizes = {}
@@ -639,10 +640,14 @@ local noclipEnabled = false
 local noclipConnection99 = nil
 local isAutoPlaying = false
 local autoCuttingTrees = false
+local mapHighlightEnabled = false
+local mapHighlight = nil
+local currentTweenToTree = nil
 
--- Enhanced ESP system
+-- Enhanced ESP system with auto-refresh
 local espData = {}
 local playerESPData = {}
+local espRefreshConnection = nil
 
 -- All creatures from the wiki
 local creatureNames = {
@@ -773,7 +778,7 @@ local function findCreaturesInWorkspace(creatureName)
     
     for _, obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("Model") and obj:FindFirstChildOfClass("Humanoid") then
-            local objName = obj.Name:lower()
+            local objName = obj.Name
             
             for _, pattern in pairs(searchPatterns) do
                 if objName:find(pattern) or objName == pattern then
@@ -787,63 +792,64 @@ local function findCreaturesInWorkspace(creatureName)
     return foundCreatures
 end
 
--- Enhanced invisible hitbox modification system
+-- Enhanced invisible hitbox modification system (FIXED - hits only 1 animal at a time)
 local function modifyCreatureHitbox(creatureName, newSize)
     local creatures = findCreaturesInWorkspace(creatureName)
     local modifiedCount = 0
     
-    for _, creature in pairs(creatures) do
+    -- Only modify one creature at a time
+    if #creatures > 0 then
+        local creature = creatures[1] -- Only take the first creature
+        
         if creature and creature.Parent then
             if not originalHitboxSizes[creature] then
                 originalHitboxSizes[creature] = {}
             end
             
+            -- Remove any existing hitboxes first
             for _, part in pairs(creature:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    if not originalHitboxSizes[creature][part] then
-                        originalHitboxSizes[creature][part] = part.Size
-                    end
-                    
-                    -- Create invisible, untouchable hitbox parts
-                    local hitboxPart = Instance.new("Part")
-                    hitboxPart.Name = "InvisibleHitbox"
-                    hitboxPart.Size = Vector3.new(newSize, newSize, newSize)
-                    hitboxPart.Position = part.Position
-                    hitboxPart.CFrame = part.CFrame
-                    hitboxPart.Anchored = true
-                    hitboxPart.CanCollide = false
-                    hitboxPart.Transparency = 1
-                    hitboxPart.Material = Enum.Material.ForceField
-                    hitboxPart.BrickColor = BrickColor.new("Bright red")
-                    hitboxPart.Parent = creature
-                    
-                    -- Make it so player can still hit the creature but not get flung
-                    hitboxPart.Touched:Connect(function(hit)
-                        if hit.Parent == player.Character then
-                            -- Prevent flinging by stabilizing player
-                            if player.Character:FindFirstChild("HumanoidRootPart") then
-                                local hrp = player.Character.HumanoidRootPart
-                                hrp.Velocity = Vector3.new(0, 0, 0)
-                                hrp.AngularVelocity = Vector3.new(0, 0, 0)
-                            end
-                        end
-                    end)
-                    
-                    -- Weld to original part
-                    local weld = Instance.new("WeldConstraint")
-                    weld.Part0 = part
-                    weld.Part1 = hitboxPart
-                    weld.Parent = hitboxPart
+                if part:IsA("Part") and part.Name == "InvisibleHitbox" then
+                    part:Destroy()
                 end
             end
             
-            modifiedCreatures[creature] = true
-            modifiedCount = modifiedCount + 1
+            -- Find main part (HumanoidRootPart or Torso)
+            local mainPart = creature:FindFirstChild("HumanoidRootPart") or 
+                            creature:FindFirstChild("Torso") or
+                            creature:FindFirstChildOfClass("BasePart")
+            
+            if mainPart then
+                -- Store original size
+                if not originalHitboxSizes[creature][mainPart] then
+                    originalHitboxSizes[creature][mainPart] = mainPart.Size
+                end
+                
+                -- Create single invisible hitbox part
+                local hitboxPart = Instance.new("Part")
+                hitboxPart.Name = "InvisibleHitbox"
+                hitboxPart.Size = Vector3.new(newSize, newSize, newSize)
+                hitboxPart.CFrame = mainPart.CFrame
+                hitboxPart.Anchored = true
+                hitboxPart.CanCollide = false
+                hitboxPart.Transparency = 1
+                hitboxPart.Material = Enum.Material.ForceField
+                hitboxPart.BrickColor = BrickColor.new("Bright red")
+                hitboxPart.Parent = creature
+                
+                -- Weld to main part
+                local weld = Instance.new("WeldConstraint")
+                weld.Part0 = mainPart
+                weld.Part1 = hitboxPart
+                weld.Parent = hitboxPart
+                
+                modifiedCreatures[creature] = true
+                modifiedCount = 1
+            end
         end
     end
     
     if modifiedCount > 0 then
-        print("Modified " .. modifiedCount .. " " .. creatureName .. "(s) with invisible, untouchable hitboxes of size " .. newSize)
+        print("Modified 1 " .. creatureName .. " with invisible hitbox of size " .. newSize)
         return true
     else
         print("No " .. creatureName .. " found to modify!")
@@ -934,7 +940,7 @@ local function createHitboxVisualization(creatureName, size)
     print("Hitbox visualization created for " .. #hitboxVisualization .. " " .. creatureName .. "(s) with size " .. size)
 end
 
--- ENHANCED ESP System for Creatures
+-- ENHANCED ESP System for Creatures with auto-refresh
 local function createESPForCreature(creature)
     if not creature or not creature.Parent then return end
     
@@ -1115,6 +1121,52 @@ local function createESPForPlayer(targetPlayer)
     playerESPData[targetPlayer] = {box = espBox, billboard = billboard, connection = connection}
 end
 
+-- ESP Auto-refresh system (refreshes every 5 seconds)
+local function startESPAutoRefresh()
+    if espRefreshConnection then return end
+    
+    espRefreshConnection = RunService.Heartbeat:Connect(function()
+        task.wait(5) -- 5 second intervals
+        
+        if allESPEnabled then
+            -- Refresh all creature ESP
+            local allCreatures = scanWorkspaceForCreatures()
+            for _, creatureName in pairs(allCreatures) do
+                local creatures = findCreaturesInWorkspace(creatureName)
+                for _, creature in pairs(creatures) do
+                    if not espData[creature] then
+                        createESPForCreature(creature)
+                    end
+                end
+            end
+        elseif espEnabled and selectedESPCreature ~= "" then
+            -- Refresh selected creature ESP
+            local creatures = findCreaturesInWorkspace(selectedESPCreature)
+            for _, creature in pairs(creatures) do
+                if not espData[creature] then
+                    createESPForCreature(creature)
+                end
+            end
+        end
+        
+        if playerESPEnabled then
+            -- Refresh player ESP
+            for _, targetPlayer in pairs(Players:GetPlayers()) do
+                if targetPlayer ~= player and targetPlayer.Character and not playerESPData[targetPlayer] then
+                    createESPForPlayer(targetPlayer)
+                end
+            end
+        end
+    end)
+end
+
+local function stopESPAutoRefresh()
+    if espRefreshConnection then
+        espRefreshConnection:Disconnect()
+        espRefreshConnection = nil
+    end
+end
+
 -- Remove ESP from creature
 local function removeESPFromCreature(creature)
     if espData[creature] then
@@ -1171,7 +1223,9 @@ local function enableCreatureESP(creatureName)
     for _, creature in pairs(creatures) do
         createESPForCreature(creature)
     end
-    print("ESP enabled for " .. #creatures .. " " .. creatureName .. "(s)")
+    espEnabled = true
+    startESPAutoRefresh()
+    print("ESP enabled for " .. #creatures .. " " .. creatureName .. "(s) with auto-refresh")
 end
 
 -- Enable ESP for all creatures
@@ -1183,7 +1237,9 @@ local function enableAllCreatureESP()
             createESPForCreature(creature)
         end
     end
-    print("ESP enabled for all creatures")
+    allESPEnabled = true
+    startESPAutoRefresh()
+    print("ESP enabled for all creatures with auto-refresh")
 end
 
 -- Enable ESP for all players
@@ -1193,11 +1249,18 @@ local function enableAllPlayerESP()
             createESPForPlayer(targetPlayer)
         end
     end
-    print("ESP enabled for all players")
+    playerESPEnabled = true
+    startESPAutoRefresh()
+    print("ESP enabled for all players with auto-refresh")
 end
 
 -- Disable all ESP
 local function disableAllESP()
+    espEnabled = false
+    allESPEnabled = false
+    playerESPEnabled = false
+    stopESPAutoRefresh()
+    
     for creature, _ in pairs(espData) do
         removeESPFromCreature(creature)
     end
@@ -1217,38 +1280,61 @@ local function disableAllESP()
     print("All ESP disabled")
 end
 
--- FIXED Enhanced item spawning - only spawn items that exist
+-- Map Highlight Toggle
+local function toggleMapHighlight()
+    if mapHighlightEnabled then
+        -- Disable map highlight
+        if mapHighlight then
+            mapHighlight:Destroy()
+            mapHighlight = nil
+        end
+        mapHighlightEnabled = false
+        print("Map highlight disabled")
+    else
+        -- Enable map highlight
+        mapHighlight = Instance.new("ColorCorrectionEffect")
+        mapHighlight.Name = "LostHubMapHighlight"
+        mapHighlight.Brightness = 0.5
+        mapHighlight.Contrast = 0.3
+        mapHighlight.Saturation = 0.2
+        mapHighlight.Parent = Lighting
+        mapHighlightEnabled = true
+        print("Map highlight enabled - map is now brighter")
+    end
+end
+
+-- FIXED Enhanced item spawning - only spawn logs from picture reference
 local function spawnSelectedItem(itemName)
     if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
         print("Character not found!")
         return
     end
     
-    -- Find reference item in workspace - FIXED to properly find items
+    -- Special handling for logs based on picture
     local referenceItem = nil
     
-    -- First try exact name match
-    for _, obj in pairs(workspace:GetDescendants()) do
-        if obj.Name == itemName and (obj:IsA("Part") or obj:IsA("Model")) then
-            referenceItem = obj
-            print("Found exact match: " .. obj.Name)
-            break
-        end
-    end
-    
-    -- If no exact match, try variations for logs
-    if not referenceItem and itemName:lower():find("log") then
+    if itemName:lower():find("log") then
+        -- Look specifically for Log/Logs items as shown in picture
         local searchNames = {"Log", "Logs", "log", "logs"}
         
         for _, searchName in pairs(searchNames) do
             for _, obj in pairs(workspace:GetDescendants()) do
                 if obj.Name == searchName and (obj:IsA("Part") or obj:IsA("Model")) then
                     referenceItem = obj
-                    print("Found log variation: " .. obj.Name)
+                    print("Found log reference: " .. obj.Name)
                     break
                 end
             end
             if referenceItem then break end
+        end
+    else
+        -- First try exact name match for other items
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj.Name == itemName and (obj:IsA("Part") or obj:IsA("Model")) then
+                referenceItem = obj
+                print("Found exact match: " .. obj.Name)
+                break
+            end
         end
     end
     
@@ -1293,6 +1379,7 @@ local function spawnSelectedItem(itemName)
     task.wait(2)
     print("Auto-collecting all " .. itemName .. "s...")
     
+    -- Collect all spawned items
     for _, obj in pairs(workspace:GetChildren()) do
         if obj.Name == itemName or obj.Name == "Log" or obj.Name == "Logs" then
             if obj:IsA("Part") then
@@ -1322,7 +1409,7 @@ local function spawnSelectedItem(itemName)
     print("All " .. itemName .. "s collected!")
 end
 
--- FIXED Enhanced auto-cut trees with proper tweening and noclip
+-- FIXED Enhanced auto-cut trees with proper tweening (doesn't skip trees)
 local function startAutoCutTrees()
     if autoCuttingTrees then return end
     
@@ -1344,6 +1431,7 @@ local function startAutoCutTrees()
                 end)
                 
                 local trees = scanWorkspaceForSmallTrees()
+                print("Found " .. #trees .. " small trees to cut")
                 
                 for _, tree in pairs(trees) do
                     if not autoCuttingTrees then break end
@@ -1359,22 +1447,29 @@ local function startAutoCutTrees()
                     if treePos then
                         print("Tweening to tree: " .. tree.Name)
                         
-                        -- FIXED Tween to tree
+                        -- FIXED: Position player BEHIND the tree, not inside it
+                        local behindTreePos = treePos + Vector3.new(0, 0, -8) -- Behind the tree
+                        local targetCFrame = CFrame.lookAt(behindTreePos, treePos)
+                        
+                        -- Cancel any existing tree tween
+                        if currentTweenToTree then
+                            currentTweenToTree:Cancel()
+                        end
+                        
                         local tweenInfo = TweenInfo.new(
-                            2,
+                            3, -- 3 seconds to reach tree
                             Enum.EasingStyle.Quad,
                             Enum.EasingDirection.Out
                         )
                         
-                        local targetCFrame = CFrame.new(treePos + Vector3.new(0, 3, 0))
-                        local tween = TweenService:Create(
+                        currentTweenToTree = TweenService:Create(
                             player.Character.HumanoidRootPart,
                             tweenInfo,
                             {CFrame = targetCFrame}
                         )
                         
-                        tween:Play()
-                        tween.Completed:Wait()
+                        currentTweenToTree:Play()
+                        currentTweenToTree.Completed:Wait()
                         
                         -- Auto-click tree
                         if tree and tree.Parent and autoCuttingTrees then
@@ -1391,19 +1486,28 @@ local function startAutoCutTrees()
                                 print("Auto-clicked tree: " .. tree.Name)
                             end
                             
-                            -- Wait for tree to be cut down or timeout
-                            local maxWait = 0
-                            while tree and tree.Parent and maxWait < 50 and autoCuttingTrees do
-                                task.wait(0.1)
-                                maxWait = maxWait + 1
+                            -- FIXED: Wait until tree is completely gone before moving to next
+                            local maxWaitTime = 15 -- 15 seconds maximum wait
+                            local waitTime = 0
+                            
+                            while tree and tree.Parent and waitTime < maxWaitTime and autoCuttingTrees do
+                                task.wait(0.5)
+                                waitTime = waitTime + 0.5
+                                
+                                -- Check if tree still exists
+                                if not tree.Parent then
+                                    print("Tree successfully cut: " .. (tree and tree.Name or "Unknown"))
+                                    break
+                                end
                             end
                             
-                            if not tree or not tree.Parent then
-                                print("Tree successfully cut: " .. (tree and tree.Name or "Unknown"))
+                            -- Only move to next tree if this one is gone or timeout reached
+                            if tree and tree.Parent then
+                                print("Tree cutting timed out, moving to next tree")
                             end
                         end
                         
-                        task.wait(1) -- Wait between trees
+                        task.wait(1) -- Brief pause between trees
                     end
                 end
                 
@@ -1420,15 +1524,21 @@ local function startAutoCutTrees()
                         end
                     end
                 end
+                
+                print("Tree cutting cycle complete, waiting before next scan...")
             end
             
-            task.wait(5) -- Wait before next scan
+            task.wait(10) -- Wait 10 seconds before next scan
         end
     end)
 end
 
 local function stopAutoCutTrees()
     autoCuttingTrees = false
+    if currentTweenToTree then
+        currentTweenToTree:Cancel()
+        currentTweenToTree = nil
+    end
     print("Auto tree cutting stopped")
 end
 
@@ -1724,6 +1834,58 @@ local function updatePlayerJumpPower(power)
     if player.Character and player.Character:FindFirstChild("Humanoid") then
         player.Character.Humanoid.JumpPower = power
     end
+end
+
+-- Player teleportation function
+local function teleportToPlayer(targetPlayerName)
+    local targetPlayer = Players:FindFirstChild(targetPlayerName)
+    if not targetPlayer then
+        print("Player not found: " .. targetPlayerName)
+        return
+    end
+    
+    if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        print("Target player character not found!")
+        return
+    end
+    
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+        print("Your character not found!")
+        return
+    end
+    
+    player.Character.HumanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, -5)
+    print("Teleported to " .. targetPlayerName)
+end
+
+-- Tween to player function
+local function tweenToPlayer(targetPlayerName)
+    local targetPlayer = Players:FindFirstChild(targetPlayerName)
+    if not targetPlayer then
+        print("Player not found: " .. targetPlayerName)
+        return
+    end
+    
+    if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        print("Target player character not found!")
+        return
+    end
+    
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+        print("Your character not found!")
+        return
+    end
+    
+    local targetPos = targetPlayer.Character.HumanoidRootPart.Position
+    local tweenInfo = TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local tween = TweenService:Create(
+        player.Character.HumanoidRootPart,
+        tweenInfo,
+        {CFrame = CFrame.new(targetPos + Vector3.new(0, 0, -5))}
+    )
+    
+    tween:Play()
+    print("Tweening to " .. targetPlayerName)
 end
 
 -- Hub Creation Function
@@ -2330,7 +2492,7 @@ local function createHub()
             Desc = "Dedicated individuals who test new features, report bugs, and provide feedback to ensure the script works reliably across different scenarios."
         })
         
-        -- NEW Enhanced ESP Tab for 99 Nights
+        -- NEW Enhanced ESP Tab for 99 Nights with auto-refresh every 5 seconds
         tabs.EspTab:Section({Title = "Creature ESP System"})
         
         local creatureESPDropdown = tabs.EspTab:Dropdown({
@@ -2344,7 +2506,7 @@ local function createHub()
             end
         })
         
-        -- Auto-update creature ESP dropdown
+        -- Auto-update creature ESP dropdown every 5 seconds
         task.spawn(function()
             while task.wait(5) do
                 if creatureESPDropdown then
@@ -2356,34 +2518,39 @@ local function createHub()
         
         tabs.EspTab:Toggle({
             Title = "ESP Creatures",
-            Desc = "Add line and box on selected creature with distance and name",
+            Desc = "Add line and box on selected creature with distance and name (refreshes every 5s)",
             Default = false,
             Callback = function(state)
                 if state and selectedESPCreature ~= "" then
                     enableCreatureESP(selectedESPCreature)
                 else
-                    disableAllESP()
+                    espEnabled = false
+                    if not allESPEnabled and not playerESPEnabled then
+                        disableAllESP()
+                    end
                 end
             end
         })
         
         tabs.EspTab:Toggle({
             Title = "ESP All Creatures",
-            Desc = "Add line and box on all creatures with distance and names",
+            Desc = "Add line and box on all creatures with distance and names (refreshes every 5s)",
             Default = false,
             Callback = function(state)
                 allESPEnabled = state
                 if state then
                     enableAllCreatureESP()
                 else
-                    disableAllESP()
+                    if not espEnabled and not playerESPEnabled then
+                        disableAllESP()
+                    end
                 end
             end
         })
         
         tabs.EspTab:Toggle({
             Title = "ESP Players",
-            Desc = "Add line and box on players with distance and usernames",
+            Desc = "Add line and box on players with distance and usernames (refreshes every 5s)",
             Default = false,
             Callback = function(state)
                 playerESPEnabled = state
@@ -2395,12 +2562,15 @@ local function createHub()
                         removeESPFromPlayer(targetPlayer)
                     end
                     playerESPData = {}
+                    if not espEnabled and not allESPEnabled then
+                        stopESPAutoRefresh()
+                    end
                     print("Player ESP disabled")
                 end
             end
         })
         
-        -- NEW Enhanced Player Tab for 99 Nights
+        -- NEW Enhanced Player Tab for 99 Nights with teleport dropdown + buttons
         tabs.PlayerTab:Section({Title = "Movement System"})
         
         tabs.PlayerTab:Slider({
@@ -2422,7 +2592,7 @@ local function createHub()
             Step = 1,
             Value = {
                 Min = 1,
-                Max = 50,
+                Max = 200,
                 Default = 50,
             },
             Callback = function(value)
@@ -2432,8 +2602,8 @@ local function createHub()
         })
         
         tabs.PlayerTab:Toggle({
-            Title = "Fly",
-            Desc = "Uses CFrame + float for smooth flying",
+            Title = "Float",
+            Desc = "Uses CFrame + BodyVelocity for smooth floating",
             Default = false,
             Callback = function(state)
                 if state then
@@ -2444,7 +2614,106 @@ local function createHub()
             end
         })
         
-        -- Enhanced Creatures Tab
+        tabs.PlayerTab:Slider({
+            Title = "Float Speed",
+            Step = 1,
+            Value = {
+                Min = 1,
+                Max = 200,
+                Default = 50,
+            },
+            Callback = function(value)
+                flySpeed = value
+                print("Float speed set to: " .. value)
+            end
+        })
+        
+        tabs.PlayerTab:Toggle({
+            Title = "Noclip",
+            Desc = "Walk through walls with anti-cheat bypass",
+            Default = false,
+            Callback = function(state)
+                if state then
+                    enableNoclip99()
+                else
+                    disableNoclip99()
+                end
+            end
+        })
+        
+        -- Player Teleportation Section with Dropdown + Buttons
+        tabs.PlayerTab:Section({Title = "Player Teleportation"})
+        
+        local function getOnlinePlayersFor99Nights()
+            local playerList = {}
+            for _, plr in pairs(Players:GetPlayers()) do
+                if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                    table.insert(playerList, plr.Name)
+                end
+            end
+            return playerList
+        end
+        
+        local playerTeleportDropdown = tabs.PlayerTab:Dropdown({
+            Title = "Select Player to Teleport To",
+            Values = getOnlinePlayersFor99Nights(),
+            Multi = false,
+            Default = 1,
+            Callback = function(value)
+                selectedPlayerForTP = value or ""
+                print("Selected player for teleport: " .. selectedPlayerForTP)
+            end
+        })
+        
+        -- Auto-update player teleport dropdown
+        task.spawn(function()
+            while task.wait(3) do
+                if playerTeleportDropdown then
+                    local newPlayers = getOnlinePlayersFor99Nights()
+                    playerTeleportDropdown:SetValues(newPlayers)
+                    
+                    -- Reset selection if player left
+                    if selectedPlayerForTP ~= "" then
+                        local found = false
+                        for _, name in pairs(newPlayers) do
+                            if name == selectedPlayerForTP then
+                                found = true
+                                break
+                            end
+                        end
+                        if not found then
+                            selectedPlayerForTP = ""
+                        end
+                    end
+                end
+            end
+        end)
+        
+        tabs.PlayerTab:Button({
+            Title = "Teleport to Player",
+            Desc = "Instantly teleport to selected player",
+            Callback = function()
+                if selectedPlayerForTP ~= "" then
+                    teleportToPlayer(selectedPlayerForTP)
+                else
+                    print("Please select a player first!")
+                end
+            end
+        })
+        
+        tabs.PlayerTab:Button({
+            Title = "Tween to Player",
+            Desc = "Smoothly tween to selected player",
+            Callback = function()
+                if selectedPlayerForTP ~= "" then
+                    tweenToPlayer(selectedPlayerForTP)
+                else
+                    print("Please select a player first!")
+                end
+            end
+        })
+        
+        -- Enhanced Creatures Tab with single-hit hitbox
         tabs.CreaturesTab:Section({Title = "Dynamic Creature System"})
         
         local creatureDropdown = tabs.CreaturesTab:Dropdown({
@@ -2492,7 +2761,7 @@ local function createHub()
         
         tabs.CreaturesTab:Button({
             Title = "Modify Creature Hitbox",
-            Desc = "Create invisible, untouchable large hitbox",
+            Desc = "Create invisible hitbox (hits only 1 animal at a time)",
             Callback = function()
                 modifyCreatureHitbox(selectedCreature, hitboxSize)
             end
@@ -2500,7 +2769,7 @@ local function createHub()
         
         tabs.CreaturesTab:Button({
             Title = "Modify ALL Creatures",
-            Desc = "Apply hitbox to all creatures",
+            Desc = "Apply hitbox to all creatures (1 of each type)",
             Callback = function()
                 local allCreatures = scanWorkspaceForCreatures()
                 local totalModified = 0
@@ -2539,6 +2808,19 @@ local function createHub()
         })
         
         -- Enhanced World Features Tab
+        tabs.WorldTab:Section({Title = "Map Features"})
+        
+        tabs.WorldTab:Toggle({
+            Title = "Highlight Map",
+            Desc = "Toggle map brightness for better visibility",
+            Default = false,
+            Callback = function(state)
+                if state ~= mapHighlightEnabled then
+                    toggleMapHighlight()
+                end
+            end
+        })
+        
         tabs.WorldTab:Section({Title = "Dynamic Item Spawning"})
         
         local itemDropdown = tabs.WorldTab:Dropdown({
@@ -2565,7 +2847,7 @@ local function createHub()
         
         tabs.WorldTab:Button({
             Title = "Spawn Selected Item",
-            Desc = "Spawns the selected item (only items that exist in game)",
+            Desc = "Spawns the selected item (only items that exist in game) - FIXED for logs",
             Callback = function()
                 if selectedItem ~= "" then
                     spawnSelectedItem(selectedItem)
@@ -2610,7 +2892,7 @@ local function createHub()
         
         tabs.WorldTab:Toggle({
             Title = "Auto Cut Small Trees",
-            Desc = "Auto cut trees with tweening and noclip (goes to 1 tree at a time)",
+            Desc = "FIXED: Auto cut trees with proper tweening - goes behind tree, waits for completion",
             Default = false,
             Callback = function(state)
                 if state then
@@ -3021,14 +3303,26 @@ print("Discord: discord.gg/qbBww8Xm")
 if currentGame == "MM2" then
     print("MM2 features available: ESP, Auto-Kill, Gun Teleport, Collection, Sheriff Aimbot, Random Features")
 elseif currentGame == "99NIGHTS" then
-    print("99 Nights features available:")
-    print("- Enhanced ESP System with creature and player support")
-    print("- Advanced Player Movement (CFrame Fly, Speed 1-100, Jump 1-50)")
-    print("- Invisible Untouchable Hitbox System (1-10000 range)")
-    print("- Auto-Play Mode (hunt bunnies, collect items, cut trees)")
-    print("- FIXED Auto Tree Cutting with proper tweening and noclip")
-    print("- FIXED Logs/Items Spawning - only shows items that exist in game")
-    print("- Real-time Dynamic Dropdowns")
+    print("Roblox")
+    print("Roblox")
+    print("")
+    print("")
+    print("")
+    print("")
+    print("")
+    print("")
+    print("")
+    print("")
 end
 
-print("Lost Hub Complete Edition - All issues FIXED!")
+print("Roblox")
+print("Roblox")
+print("Roblox") 
+print("Roblox")
+print("Roblox")
+print("Roblox")
+print("Roblox")
+print("Roblox")
+print("Roblox")
+print("Roblox")
+print("Roblox")
