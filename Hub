@@ -2427,8 +2427,7 @@ local function createHub()
             Desc = "Uses CFrame + BodyVelocity for smooth floating",
             Default = false,
             Callback = function(state)
-                if state then
-startFly()
+                if state then startFly()
                 else
                     stopFly()
                 end
